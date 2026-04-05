@@ -1,7 +1,17 @@
 #!/bin/bash
 # Build both arm32 and arm64 Android APKs in one go
-# Usage: bash build_android_all.sh
+# Usage: bash build_android_all.sh [--clean]
+#   --clean: Remove build directories and do a full rebuild
+#   Without --clean: Incremental build (only recompile changed files)
 # Run this script from the renderdoc root directory in MSYS2
+
+# Parse arguments
+DO_CLEAN=0
+for arg in "$@"; do
+    case "$arg" in
+        --clean) DO_CLEAN=1 ;;
+    esac
+done
 
 echo "[DEBUG] Script started!"
 echo "[DEBUG] Bash version: $BASH_VERSION"
@@ -59,9 +69,12 @@ echo "============================================"
 echo "  Building Android arm32 (armeabi-v7a)"
 echo "============================================"
 
-# Clean and rebuild to ensure fresh version
-echo "[DEBUG] Removing old build-android-arm32..."
-rm -rf build-android-arm32
+if [ "$DO_CLEAN" -eq 1 ]; then
+    echo "[DEBUG] Clean build: Removing old build-android-arm32..."
+    rm -rf build-android-arm32
+else
+    echo "[DEBUG] Incremental build: Keeping existing build-android-arm32"
+fi
 mkdir -p build-android-arm32
 echo "[DEBUG] pushd build-android-arm32"
 pushd build-android-arm32
@@ -92,9 +105,12 @@ echo "============================================"
 echo "  Building Android arm64 (arm64-v8a)"
 echo "============================================"
 
-# Clean and rebuild to ensure fresh version
-echo "[DEBUG] Removing old build-android-arm64..."
-rm -rf build-android-arm64
+if [ "$DO_CLEAN" -eq 1 ]; then
+    echo "[DEBUG] Clean build: Removing old build-android-arm64..."
+    rm -rf build-android-arm64
+else
+    echo "[DEBUG] Incremental build: Keeping existing build-android-arm64"
+fi
 mkdir -p build-android-arm64
 echo "[DEBUG] pushd build-android-arm64"
 pushd build-android-arm64

@@ -162,7 +162,13 @@ if "%BUILD_WIN%"=="1" (
     )
     echo [WIN] Log: %WIN_LOG%
 
-    start "RenderDoc-Windows-Build" /min cmd /c ^"^"!MSBUILD_EXE!^" ^"!SLN_FILE!^" /t:!MSBUILD_TARGET! /p:Configuration=!BUILD_CONFIG! /p:Platform=!BUILD_PLATFORM! /m /v:minimal /nologo ^> ^"!WIN_LOG!^" 2^>^&1 ^&^& echo WIN_SUCCESS ^> ^"!LOG_DIR!\win_result.tmp^" ^|^| echo WIN_FAILED ^> ^"!LOG_DIR!\win_result.tmp^"^"
+    REM Use /p:PlatformToolset=v143 because v141 is installed inside VS Insider,
+    REM but VS Insider's command-line MSBuild cannot locate v141 toolset.
+    REM Write a helper bat script to avoid escaping issues with start cmd /c
+    set "WIN_HELPER=!LOG_DIR!\win_build_helper.bat"
+    REM Generate helper script via a subroutine to avoid parenthesis conflicts
+    call :write_win_helper "!WIN_HELPER!" "!MSBUILD_EXE!" "!SLN_FILE!" "!MSBUILD_TARGET!" "!BUILD_CONFIG!" "!BUILD_PLATFORM!" "!WIN_LOG!" "!LOG_DIR!"
+    start "RenderDoc-Windows-Build" /min cmd /c "!WIN_HELPER!"
 
     echo [WIN] Build started in background.
 )
@@ -173,20 +179,10 @@ if "%BUILD_ANDROID%"=="1" (
     echo [ANDROID] Starting Android build via MSYS2 MINGW64 ...
     echo [ANDROID] Log: %ANDROID_LOG%
 
-    REM Use msys2_shell.cmd with -mingw64 to launch MINGW64 environment
-    REM -defterm: use default terminal (cmd window)
-    REM -no-start: don't open a new window (we handle it ourselves)
-    REM -here: use current directory
-    REM -c: run command
-
-    REM Convert Windows paths to MSYS2 paths for the shell command
-    set "MSYS_LOG_DIR=%LOG_DIR:\=/%"
-    set "MSYS_LOG_DIR=!MSYS_LOG_DIR:C:/=/c/!"
-    set "MSYS_LOG_DIR=!MSYS_LOG_DIR:D:/=/d/!"
-    set "MSYS_LOG_DIR=!MSYS_LOG_DIR:E:/=/e/!"
+    REM Launch MSYS2 MINGW64 bash directly (more reliable than msys2_shell.cmd with start)
+    REM We set MSYSTEM=MINGW64 and call bash.exe directly from MSYS2's usr/bin
 
     REM Android clean: remove old build directories before build_android_all.sh
-    REM (build_android_all.sh already does rm -rf internally, but we also clean build-android output)
     if "%DO_CLEAN%"=="1" (
         echo [ANDROID] Cleaning old Android build directories...
         if exist "%RENDERDOC_ROOT%build-android-arm32" rmdir /s /q "%RENDERDOC_ROOT%build-android-arm32"
@@ -194,13 +190,25 @@ if "%BUILD_ANDROID%"=="1" (
         if exist "%RENDERDOC_ROOT%build-android" rmdir /s /q "%RENDERDOC_ROOT%build-android"
     )
 
-    REM Convert RENDERDOC_ROOT to MSYS2 path
-    set "MSYS_ROOT_PATH=%RENDERDOC_ROOT:\=/%"
-    set "MSYS_ROOT_PATH=!MSYS_ROOT_PATH:C:/=/c/!"
-    set "MSYS_ROOT_PATH=!MSYS_ROOT_PATH:D:/=/d/!"
-    set "MSYS_ROOT_PATH=!MSYS_ROOT_PATH:E:/=/e/!"
+    REM Write a helper shell script that build_all.bat will invoke via bash
+    REM This avoids all quoting/escaping issues between cmd.exe and bash
+    set "HELPER_SCRIPT=!LOG_DIR!\android_build_helper.sh"
+    set "ANDROID_CLEAN_ARG="
+    if "%DO_CLEAN%"=="1" set "ANDROID_CLEAN_ARG=--clean"
+    > "!HELPER_SCRIPT!" echo #!/bin/bash
+    >> "!HELPER_SCRIPT!" echo export MSYSTEM=MINGW64
+    >> "!HELPER_SCRIPT!" echo source /etc/profile
+    >> "!HELPER_SCRIPT!" echo cd "$(cygpath '%RENDERDOC_ROOT%')"
+    >> "!HELPER_SCRIPT!" echo LOGFILE="$(cygpath '%ANDROID_LOG%')"
+    >> "!HELPER_SCRIPT!" echo RESULTFILE="$(cygpath '%LOG_DIR%')/android_result.tmp"
+    >> "!HELPER_SCRIPT!" echo echo "Android build started at $(date)" ^> "$LOGFILE"
+    >> "!HELPER_SCRIPT!" echo if bash build_android_all.sh !ANDROID_CLEAN_ARG! ^>^> "$LOGFILE" 2^>^&1; then
+    >> "!HELPER_SCRIPT!" echo   echo ANDROID_SUCCESS ^> "$RESULTFILE"
+    >> "!HELPER_SCRIPT!" echo else
+    >> "!HELPER_SCRIPT!" echo   echo ANDROID_FAILED ^> "$RESULTFILE"
+    >> "!HELPER_SCRIPT!" echo fi
 
-    start "RenderDoc-Android-Build" /min "!MSYS2_ROOT!\msys2_shell.cmd" -mingw64 -defterm -no-start -here -c "cd '!MSYS_ROOT_PATH!' && bash build_android_all.sh > '!MSYS_LOG_DIR!/android_build_!TIMESTAMP!.log' 2>&1 && echo ANDROID_SUCCESS > '!MSYS_LOG_DIR!/android_result.tmp' || echo ANDROID_FAILED > '!MSYS_LOG_DIR!/android_result.tmp'"
+    start "RenderDoc-Android-Build" /min "!MSYS2_ROOT!\usr\bin\bash.exe" --login "!HELPER_SCRIPT!"
 
     echo [ANDROID] Build started in background.
 )
@@ -250,7 +258,8 @@ echo ============================================================
 set "EXIT_CODE=0"
 
 if "%BUILD_WIN%"=="1" (
-    if "!WIN_RESULT!"=="WIN_SUCCESS" (
+    echo !WIN_RESULT! | findstr /C:"WIN_SUCCESS" >nul 2>&1
+    if !errorlevel! equ 0 (
         echo   [WIN]     SUCCESS  - Output: %RENDERDOC_ROOT%%BUILD_PLATFORM%\%BUILD_CONFIG%\
         echo                        Log:    %WIN_LOG%
     ) else (
@@ -260,7 +269,8 @@ if "%BUILD_WIN%"=="1" (
 )
 
 if "%BUILD_ANDROID%"=="1" (
-    if "!ANDROID_RESULT!"=="ANDROID_SUCCESS" (
+    echo !ANDROID_RESULT! | findstr /C:"ANDROID_SUCCESS" >nul 2>&1
+    if !errorlevel! equ 0 (
         echo   [ANDROID] SUCCESS  - Output: %RENDERDOC_ROOT%build-android\bin\
         echo                        Log:    %ANDROID_LOG%
     ) else (
@@ -283,3 +293,21 @@ if "%EXIT_CODE%"=="0" (
 )
 
 exit /b %EXIT_CODE%
+
+REM === Subroutine: Write Windows build helper script ===
+REM Called outside of if() blocks to avoid parenthesis parsing issues
+:write_win_helper
+set "_HELPER=%~1"
+set "_MSBUILD=%~2"
+set "_SLN=%~3"
+set "_TARGET=%~4"
+set "_CONFIG=%~5"
+set "_PLATFORM=%~6"
+set "_LOG=%~7"
+set "_LOGDIR=%~8"
+> "%_HELPER%" echo @echo off
+>> "%_HELPER%" echo "%_MSBUILD%" "%_SLN%" /t:%_TARGET% /p:Configuration=%_CONFIG% /p:Platform=%_PLATFORM% /p:PlatformToolset=v143 /m /v:minimal /nologo ^> "%_LOG%" 2^>^&1
+>> "%_HELPER%" echo REM Judge success by checking if log contains build errors
+>> "%_HELPER%" echo findstr /R /C:"^Build FAILED" /C:": error " "%_LOG%" ^>nul 2^>^&1
+>> "%_HELPER%" echo if errorlevel 1 (echo WIN_SUCCESS^>"%_LOGDIR%\win_result.tmp") else (echo WIN_FAILED^>"%_LOGDIR%\win_result.tmp")
+goto :eof

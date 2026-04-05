@@ -32,6 +32,7 @@
 
 #include "common/common.h"
 #include "common/formatting.h"
+#include "os/os_specific.h"
 #include "strings/string_utils.h"
 
 // Sentinel value for empty linked list nodes
@@ -605,7 +606,7 @@ bool ClusterLightingAnalyzer::ExportSceneDepth(IReplayController *controller,
 
   // Save raw depth data
   rdcstr depthPath = outputDir + "/scene_depth.bin";
-  FILE *f = fopen(depthPath.c_str(), "wb");
+  FILE *f = FileIO::fopen(depthPath.c_str(), FileIO::WriteBinary);
   if(f)
   {
     fwrite(depthData.data(), 1, depthData.size(), f);
@@ -846,7 +847,7 @@ bool ClusterLightingAnalyzer::ExportJSON(const rdcstr &outputDir)
 //----------------------------------------------------------------------
 bool ClusterLightingAnalyzer::WriteStringToFile(const rdcstr &path, const rdcstr &content)
 {
-  FILE *f = fopen(path.c_str(), "w");
+  FILE *f = FileIO::fopen(path.c_str(), FileIO::WriteText);
   if(!f)
   {
     RDCERR("ClusterLightingAnalyzer: Failed to open file for writing: %s", path.c_str());

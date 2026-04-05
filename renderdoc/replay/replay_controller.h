@@ -230,6 +230,11 @@ public:
 
   ResultDetails SaveTexture(const TextureSave &saveData, const rdcstr &path);
 
+  // [Begin Wisinzhu] : Add cluster lighting analysis method
+  rdcstr AnalyzeClusterLighting(const rdcstr &outputDir);
+  // [Official]-----------------------------------------------------------------------------
+  // [End Wisinzhu]
+
   rdcarray<ShaderVariable> GetCBufferVariableContents(ResourceId pipeline, ResourceId shader,
                                                       ShaderStage stage, const rdcstr &entryPoint,
                                                       uint32_t cbufslot, ResourceId buffer,

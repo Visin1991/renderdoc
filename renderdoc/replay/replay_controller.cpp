@@ -26,6 +26,10 @@
 #include "replay_controller.h"
 #include <string.h>
 #include <time.h>
+// [Begin Wisinzhu] : Include cluster lighting analyzer for AnalyzeClusterLighting API
+#include "cluster_lighting_analyzer.h"
+// [Official]-----------------------------------------------------------------------------
+// [End Wisinzhu]
 #include "common/dds_readwrite.h"
 #include "driver/ihv/amd/amd_isa.h"
 #include "driver/ihv/amd/amd_rgp.h"
@@ -1722,6 +1726,21 @@ void ReplayController::FreeTrace(ShaderDebugTrace *trace)
     delete trace;
   }
 }
+
+// [Begin Wisinzhu] : Implement cluster lighting analysis via IReplayController
+rdcstr ReplayController::AnalyzeClusterLighting(const rdcstr &outputDir)
+{
+  CHECK_REPLAY_THREAD();
+
+  ClusterLightingAnalyzer analyzer;
+  if(analyzer.Analyze(this, outputDir))
+  {
+    return analyzer.GetResultJSON();
+  }
+  return "";
+}
+// [Official]-----------------------------------------------------------------------------
+// [End Wisinzhu]
 
 rdcarray<ShaderVariable> ReplayController::GetCBufferVariableContents(
     ResourceId pipeline, ResourceId shader, ShaderStage stage, const rdcstr &entryPoint,

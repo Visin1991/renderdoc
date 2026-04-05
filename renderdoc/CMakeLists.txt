@@ -199,6 +199,11 @@ set(sources
     replay/replay_output.cpp
     replay/replay_controller.cpp
     replay/replay_controller.h
+    # [Begin Wisinzhu] : Add cluster lighting analyzer to renderdoc library
+    replay/cluster_lighting_analyzer.cpp
+    replay/cluster_lighting_analyzer.h
+    # [Official]-----------------------------------------------------------------------------
+    # [End Wisinzhu]
     replay/common/var_dispatch_helpers.h
     serialise/serialiser.cpp
     serialise/serialiser.h

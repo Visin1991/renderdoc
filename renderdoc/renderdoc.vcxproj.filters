@@ -204,6 +204,12 @@
     <ClInclude Include="replay\replay_controller.h">
       <Filter>Replay</Filter>
     </ClInclude>
+    <!-- [Begin Wisinzhu] : Add cluster lighting analyzer header -->
+    <ClInclude Include="replay\cluster_lighting_analyzer.h">
+      <Filter>Replay</Filter>
+    </ClInclude>
+    <!-- [Official] -->
+    <!-- [End Wisinzhu] -->
     <ClInclude Include="core\core.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -635,6 +641,12 @@
     <ClCompile Include="replay\replay_controller.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <!-- [Begin Wisinzhu] : Add cluster lighting analyzer source -->
+    <ClCompile Include="replay\cluster_lighting_analyzer.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <!-- [Official] -->
+    <!-- [End Wisinzhu] -->
     <ClCompile Include="core\core.cpp">
       <Filter>Core</Filter>
     </ClCompile>

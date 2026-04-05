@@ -1122,6 +1122,20 @@ texture to something compatible with the target file format.
 )");
   virtual bytebuf GetTextureData(ResourceId tex, const Subresource &sub) = 0;
 
+  // [Begin Wisinzhu] : Add cluster lighting analysis API for both local and remote replay
+  DOCUMENT(R"(Analyze UE Cluster Lighting data from the current capture.
+
+Deterministically extracts cluster lighting grid data by reading linked list
+buffers and traversing them on the CPU side with sorted output.
+
+:param str outputDir: Directory to write output files (JSON, depth texture, backbuffer).
+:return: JSON string with analysis results, or empty string on failure.
+:rtype: str
+)");
+  virtual rdcstr AnalyzeClusterLighting(const rdcstr &outputDir) = 0;
+  // [Official]-----------------------------------------------------------------------------
+  // [End Wisinzhu]
+
   static const uint32_t NoPreference = ~0U;
 
 protected:

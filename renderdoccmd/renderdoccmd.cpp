@@ -26,6 +26,10 @@
 #include "renderdoccmd.h"
 #include <app/renderdoc_app.h>
 #include <replay/version.h>
+// [Begin Wisinzhu] : cluster-lighting command uses IReplayController::AnalyzeClusterLighting API
+// No local cluster_lighting_analyzer.h needed - analysis is now in renderdoc library
+// [Official]-----------------------------------------------------------------------------
+// [End Wisinzhu]
 #include <string>
 
 rdcstr conv(const std::string &s)
@@ -1459,6 +1463,165 @@ public:
   }
 };
 
+// [Begin Wisinzhu] : Add cluster-lighting subcommand with local and remote replay support
+struct ClusterLightingCommand : public Command
+{
+private:
+  std::string filename;
+  std::string outputDir;
+  std::string remoteHost;
+
+public:
+  ClusterLightingCommand() : Command() {}
+  virtual void AddOptions(cmdline::parser &parser)
+  {
+    parser.set_footer("<capture.rdc>");
+    parser.add<std::string>("output", 'o',
+                            "Output directory for analysis results (JSON, depth, backbuffer).",
+                            false, ".");
+    parser.add<std::string>("remote", 'r',
+                            "Remote server address (host:port) for replaying on a remote device.",
+                            false, "");
+  }
+  virtual const char *Description()
+  {
+    return "Analyze cluster lighting data from a capture with deterministic CPU-side linked list "
+           "traversal. Supports both local and remote (e.g. Android) replay.";
+  }
+  virtual bool IsInternalOnly() { return false; }
+  virtual bool IsCaptureCommand() { return false; }
+  virtual bool Parse(cmdline::parser &parser, GlobalEnvironment &)
+  {
+    std::vector<std::string> rest = parser.rest();
+    if(rest.empty())
+    {
+      std::cerr << "Error: cluster-lighting command requires a capture file to load." << std::endl
+                << std::endl
+                << parser.usage();
+      return false;
+    }
+
+    filename = rest[0];
+
+    rest.erase(rest.begin());
+    parser.set_rest(rest);
+
+    if(parser.exist("output"))
+      outputDir = parser.get<std::string>("output");
+
+    if(parser.exist("remote"))
+      remoteHost = parser.get<std::string>("remote");
+
+    return true;
+  }
+  virtual int Execute(const CaptureOptions &)
+  {
+    IReplayController *controller = NULL;
+    IRemoteServer *remote = NULL;
+    ICaptureFile *file = NULL;
+
+    if(remoteHost.empty())
+    {
+      // === Local replay (for PC captures) ===
+      std::cout << "Analyzing cluster lighting locally in '" << filename << "'..." << std::endl;
+
+      file = RENDERDOC_OpenCaptureFile();
+
+      ResultDetails res = file->OpenFile(conv(filename), "rdc", NULL);
+
+      if(res.code != ResultCode::Succeeded)
+      {
+        std::cerr << "Couldn't load '" << filename << "': " << res.Message() << std::endl;
+        file->Shutdown();
+        return 1;
+      }
+
+      ResultDetails result = {};
+      rdctie(result, controller) = file->OpenCapture(ReplayOptions(), NULL);
+
+      file->Shutdown();
+      file = NULL;
+
+      if(!result.OK())
+      {
+        std::cerr << "Couldn't load and replay '" << filename << "': " << result.Message()
+                  << std::endl;
+        return 1;
+      }
+    }
+    else
+    {
+      // === Remote replay (for phone captures) ===
+      std::cout << "Connecting to remote server at '" << remoteHost << "'..." << std::endl;
+
+      ResultDetails connResult =
+          RENDERDOC_CreateRemoteServerConnection(conv(remoteHost), &remote);
+
+      if(!connResult.OK() || !remote)
+      {
+        std::cerr << "Couldn't connect to remote server '" << remoteHost
+                  << "': " << connResult.Message() << std::endl;
+        return 1;
+      }
+
+      std::cout << "Connected. Copying capture to remote device..." << std::endl;
+
+      // Copy capture file to remote device
+      rdcstr remotePath = remote->CopyCaptureToRemote(conv(filename), NULL);
+
+      if(remotePath.empty())
+      {
+        std::cerr << "Failed to copy capture to remote device." << std::endl;
+        remote->ShutdownConnection();
+        return 1;
+      }
+
+      std::cout << "Opening capture on remote device for replay..." << std::endl;
+
+      // Open capture on remote device's GPU
+      ResultDetails result = {};
+      rdctie(result, controller) =
+          remote->OpenCapture(IRemoteServer::NoPreference, remotePath, ReplayOptions(), NULL);
+
+      if(!result.OK() || !controller)
+      {
+        std::cerr << "Couldn't open capture on remote device: " << result.Message() << std::endl;
+        remote->ShutdownConnection();
+        return 1;
+      }
+    }
+
+    // === Run analysis (same code for local and remote) ===
+    std::cout << "Running cluster lighting analysis..." << std::endl;
+
+    rdcstr jsonResult = controller->AnalyzeClusterLighting(conv(outputDir));
+
+    // Cleanup
+    if(remote)
+    {
+      remote->CloseCapture(controller);
+      remote->ShutdownConnection();
+    }
+    else
+    {
+      controller->Shutdown();
+    }
+
+    if(!jsonResult.empty())
+    {
+      std::cout << "Analysis complete. Results written to '" << outputDir << "'." << std::endl;
+      return 0;
+    }
+    else
+    {
+      std::cerr << "Analysis failed." << std::endl;
+      return 1;
+    }
+  }
+};
+// [Official]-----------------------------------------------------------------------------
+// [End Wisinzhu]
+
 REPLAY_PROGRAM_MARKER()
 
 VulkanRegisterCommand *vulkan = NULL;
@@ -1574,6 +1737,10 @@ int renderdoccmd(GlobalEnvironment &env, std::vector<std::string> &argv)
     add_command("convert", new ConvertCommand());
     add_command("embed", new EmbeddedSectionCommand(false));
     add_command("extract", new EmbeddedSectionCommand(true));
+// [Begin Wisinzhu] : Register cluster-lighting command
+    add_command("cluster-lighting", new ClusterLightingCommand());
+// [Official]-----------------------------------------------------------------------------
+// [End Wisinzhu]
 #endif    // !defined(RDOC_SELFCAPTURE_LIMITEDAPI)
 
     if(argv.size() <= 1)
